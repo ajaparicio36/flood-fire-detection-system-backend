@@ -1,0 +1,18 @@
+# Web server and API
+flask==2.3.3
+flask-cors==4.0.0
+flask-socketio==5.3.6
+gunicorn==21.2.0
+pyserial==3.5
+
+# Websockets support
+python-socketio==5.10.0
+python-engineio==4.8.0
+eventlet==0.33.3
+
+# Raspberry Pi GPIO
+RPi.GPIO==0.7.1
+
+# Utility packages
+python-dotenv==1.0.0
+
