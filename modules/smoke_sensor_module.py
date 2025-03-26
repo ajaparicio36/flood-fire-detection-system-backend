@@ -39,7 +39,7 @@ class SmokeSensor:
     def is_smoke_detected(self):
         """Check if smoke is detected based on the threshold."""
         value = self.read_sensor()
-        is_detected = value == 1  # MQ2 outputs HIGH when gas detected
+        is_detected = value == GPIO.HIGH  # MQ2 outputs HIGH when gas detected
         if is_detected:
             print("ALERT: Smoke or gas detected!")
         return is_detected
