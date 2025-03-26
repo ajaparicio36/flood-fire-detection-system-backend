@@ -25,10 +25,10 @@ class SmokeSensor:
         self.threshold = threshold
         self.is_running = False
         
-        # Setup GPIO
+        # Setup GPIO with pull-down resistor to reduce noise
         GPIO.setmode(GPIO.BOARD)  # Use physical pin numbering
-        GPIO.setup(self.pin, GPIO.IN)
-        print(f"Smoke sensor initialized on pin {self.pin}")
+        GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        print(f"Smoke sensor initialized on pin {self.pin} with pull-down resistor")
     
     def read_sensor(self):
         """Read the current value from the smoke sensor."""
