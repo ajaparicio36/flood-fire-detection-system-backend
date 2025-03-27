@@ -81,16 +81,14 @@ class CameraModule:
         @self.sio.event
         def processed_frame(data):
             """Receive processed frame with detections from ML server"""
+            print(f"Received processed frame: {type(data)}")
+            if isinstance(data, dict):
+                print(f"Keys in processed frame: {data.keys()}")
+            
             if self.callback:
-                # Forward the processed data to the callback
-                # This data now contains the base64 image with bounding boxes
-                # and fire detection status
-                self.callback({
-                    'frame': data['image'] if isinstance(data, dict) else data,  # Handle both new and old format
-                    'timestamp': time.time(),
-                    'processed': True,
-                    'fire_detected': data.get('fire_detected', False) if isinstance(data, dict) else False
-                })
+                # Forward EXACTLY what we get from the ML server
+                # This ensures the 'image' field with the processed frame gets through
+                self.callback(data)
 
 
     def start_monitoring(self, callback: Optional[Callable] = None):
@@ -151,15 +149,8 @@ class CameraModule:
                 
                 # Process based on ML server connection status
                 if not self.ml_server_connected:
-                    # If ML server not connected, send raw frame
-                    if self.callback:
-                        self.callback({
-                            'frame': frame_data,
-                            'timestamp': time.time(),
-                            'processed': False
-                        })
-                    
-                    # Try to reconnect periodically
+                    # If ML server not connected, try to reconnect periodically
+                    # but don't send raw frames to frontend
                     if not hasattr(self, '_last_reconnect_attempt') or \
                        time.time() - self._last_reconnect_attempt > 30:
                         self._reconnect_to_ml_server()
@@ -171,14 +162,7 @@ class CameraModule:
                     except Exception as e:
                         logging.error(f"Error sending frame to ML server: {e}")
                         self.ml_server_connected = False
-                        
-                        # Fall back to raw frame if ML server fails
-                        if self.callback:
-                            self.callback({
-                                'frame': frame_data,
-                                'timestamp': time.time(),
-                                'processed': False
-                            })
+                        # No longer sending raw frames as fallback
                 
                 # Wait for next capture
                 time.sleep(self.capture_interval)
@@ -188,6 +172,7 @@ class CameraModule:
                 time.sleep(1)  # Pause briefly before continuing
         
         self.cleanup()
+
     
     def _connect_to_ml_server(self):
         """Attempt to connect to ML server"""
