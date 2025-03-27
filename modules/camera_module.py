@@ -87,7 +87,7 @@ class CameraModule:
                     'frame': data,
                     'timestamp': time.time()
                 })
-    
+
     def start_monitoring(self, callback: Optional[Callable] = None):
         """
         Start capturing frames from the camera and sending them to the ML server.
@@ -132,39 +132,48 @@ class CameraModule:
                 ret, frame = self.cap.read()
                 if not ret:
                     logging.warning("Failed to capture frame")
-                    time.sleep(0.5)  # Brief pause before retrying
+                    time.sleep(0.5)
                     continue
                 
-                # Process frame locally if ML server is not connected
-                if not self.ml_server_connected:
-                    # If not connected to ML server, just pass the raw frame
-                    if self.callback:
-                        # Convert to base64 for consistent format
-                        _, buffer = cv2.imencode('.jpg', frame)
-                        base64_frame = base64.b64encode(buffer).decode('utf-8')
-                        self.callback({
-                            'frame': {'image': f'data:image/jpeg;base64,{base64_frame}'},
-                            'timestamp': time.time(),
-                            'ml_server_status': 'disconnected'
-                        })
-                    
-                    # Try to reconnect periodically
-                    if not hasattr(self, '_last_reconnect_attempt') or \
-                       time.time() - self._last_reconnect_attempt > 30:  # Try every 30 seconds
-                        self._reconnect_to_ml_server()
-                else:
-                    # Convert to base64
+                # Always send the raw frame to the callback
+                if self.callback:
                     _, buffer = cv2.imencode('.jpg', frame)
                     base64_frame = base64.b64encode(buffer).decode('utf-8')
-                    frame_data = f'data:image/jpeg;base64,{base64_frame}'
+                    self.callback({
+                        'frame': f'data:image/jpeg;base64,{base64_frame}',
+                        'timestamp': time.time()
+                    })
                     
-                    # Send to ML server
-                    try:
-                        self.sio.emit('frame', frame_data)
-                    except Exception as e:
-                        logging.error(f"Error sending frame to ML server: {e}")
-                        self.ml_server_connected = False
-                
+                    # Process frame locally if ML server is not connected
+                    if not self.ml_server_connected:
+                        # If not connected to ML server, just pass the raw frame
+                        if self.callback:
+                            # Convert to base64 for consistent format
+                            _, buffer = cv2.imencode('.jpg', frame)
+                            base64_frame = base64.b64encode(buffer).decode('utf-8')
+                            self.callback({
+                                'frame': {'image': f'data:image/jpeg;base64,{base64_frame}'},
+                                'timestamp': time.time(),
+                                'ml_server_status': 'disconnected'
+                            })
+                        
+                        # Try to reconnect periodically
+                        if not hasattr(self, '_last_reconnect_attempt') or \
+                           time.time() - self._last_reconnect_attempt > 30:  # Try every 30 seconds
+                            self._reconnect_to_ml_server()
+                    else:
+                        # Convert to base64
+                        _, buffer = cv2.imencode('.jpg', frame)
+                        base64_frame = base64.b64encode(buffer).decode('utf-8')
+                        frame_data = f'data:image/jpeg;base64,{base64_frame}'
+                        
+                        # Send to ML server
+                        try:
+                            self.sio.emit('frame', frame_data)
+                        except Exception as e:
+                            logging.error(f"Error sending frame to ML server: {e}")
+                            self.ml_server_connected = False
+                    
                 # Wait for next capture
                 time.sleep(self.capture_interval)
                 
