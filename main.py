@@ -159,7 +159,7 @@ if __name__ == "__main__":
         start_sensors()
 
         # Run the Flask app with SocketIO
-        socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+        socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
     except KeyboardInterrupt:
         print("Shutting down...")
     finally:
