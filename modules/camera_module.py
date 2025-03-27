@@ -4,9 +4,11 @@ import cv2
 import base64
 import socketio
 import logging
+import os
 from typing import Callable, Optional
 
-# filepath: d:\shs-rasp-pi-system\backend\modules\camera_module.py
+# Set up basic logging configuration if not already configured
+logging.basicConfig(level=logging.INFO)
 
 class CameraModule:
     """
@@ -17,12 +19,13 @@ class CameraModule:
     """
     
     def __init__(self, 
-                 ml_server_url: str = 'http://192.168.1.24:5001',
+                 ml_server_url: str = None,
                  camera_index: int = 0, 
                  capture_interval: float = 1.0,
-                 resolution: tuple = (1280, 720),  # Changed to 720p
+                 resolution: tuple = (640, 480),  # Lower resolution for better performance
                  fps: int = 12,  # Added fps parameter
-                 callback: Optional[Callable] = None):
+                 callback: Optional[Callable] = None,
+                 max_reconnect_attempts: int = 5):
         """
         Initialize the camera module.
         
@@ -33,35 +36,47 @@ class CameraModule:
             resolution: Resolution to capture frames at (width, height)
             fps: Maximum frames per second (default: 12)
             callback: Optional callback function to receive frame data
+            max_reconnect_attempts: Maximum number of reconnection attempts
         """
+        # Get ML server URL from parameter, environment, or default
+        self.ml_server_url = ml_server_url or os.environ.get('ML_SERVER_URL') or 'http://localhost:5001'
+        logging.info(f"ML Server URL: {self.ml_server_url}")
+        
         self.camera_index = camera_index
         self.capture_interval = capture_interval
         self.resolution = resolution
-        self.fps = fps  # Store the fps setting
+        self.fps = fps
         self.callback = callback
-        self.ml_server_url = ml_server_url
+        self.max_reconnect_attempts = max_reconnect_attempts
         
         # Initialize state variables
         self.is_running = False
         self.cap = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
+        self.ml_server_connected = False
         
         # Initialize Socket.IO client for ML server connection
-        self.sio = socketio.Client()
+        self.sio = socketio.Client(reconnection=True, reconnection_attempts=max_reconnect_attempts)
         self._setup_socketio_events()
 
-    
     def _setup_socketio_events(self):
         """Set up Socket.IO event handlers"""
         
         @self.sio.event
         def connect():
             logging.info("Connected to ML server")
+            self.ml_server_connected = True
+        
+        @self.sio.event
+        def connect_error(data):
+            logging.error(f"Connection error to ML server: {data}")
+            self.ml_server_connected = False
         
         @self.sio.event
         def disconnect():
             logging.info("Disconnected from ML server")
+            self.ml_server_connected = False
         
         @self.sio.event
         def processed_frame(data):
@@ -107,13 +122,8 @@ class CameraModule:
         self._stop_event.clear()
         self.is_running = True
     
-        # Connect to ML server
-        try:
-            self.sio.connect(self.ml_server_url)
-        except Exception as e:
-            logging.error(f"Failed to connect to ML server: {e}")
-            self.cleanup()
-            return
+        # Try to connect to ML server, but continue even if it fails
+        self._connect_to_ml_server()
         
         # Main capture loop
         while not self._stop_event.is_set():
@@ -122,24 +132,65 @@ class CameraModule:
                 ret, frame = self.cap.read()
                 if not ret:
                     logging.warning("Failed to capture frame")
+                    time.sleep(0.5)  # Brief pause before retrying
                     continue
                 
-                # Convert to base64
-                _, buffer = cv2.imencode('.jpg', frame)
-                base64_frame = base64.b64encode(buffer).decode('utf-8')
-                frame_data = f'data:image/jpeg;base64,{base64_frame}'
-                
-                # Send to ML server
-                self.sio.emit('frame', frame_data)
+                # Process frame locally if ML server is not connected
+                if not self.ml_server_connected:
+                    # If not connected to ML server, just pass the raw frame
+                    if self.callback:
+                        # Convert to base64 for consistent format
+                        _, buffer = cv2.imencode('.jpg', frame)
+                        base64_frame = base64.b64encode(buffer).decode('utf-8')
+                        self.callback({
+                            'frame': {'image': f'data:image/jpeg;base64,{base64_frame}'},
+                            'timestamp': time.time(),
+                            'ml_server_status': 'disconnected'
+                        })
+                    
+                    # Try to reconnect periodically
+                    if not hasattr(self, '_last_reconnect_attempt') or \
+                       time.time() - self._last_reconnect_attempt > 30:  # Try every 30 seconds
+                        self._reconnect_to_ml_server()
+                else:
+                    # Convert to base64
+                    _, buffer = cv2.imencode('.jpg', frame)
+                    base64_frame = base64.b64encode(buffer).decode('utf-8')
+                    frame_data = f'data:image/jpeg;base64,{base64_frame}'
+                    
+                    # Send to ML server
+                    try:
+                        self.sio.emit('frame', frame_data)
+                    except Exception as e:
+                        logging.error(f"Error sending frame to ML server: {e}")
+                        self.ml_server_connected = False
                 
                 # Wait for next capture
                 time.sleep(self.capture_interval)
                 
             except Exception as e:
                 logging.error(f"Error in camera monitoring: {e}")
-                break
+                time.sleep(1)  # Pause briefly before continuing
         
         self.cleanup()
+    
+    def _connect_to_ml_server(self):
+        """Attempt to connect to ML server"""
+        try:
+            logging.info(f"Attempting to connect to ML server at {self.ml_server_url}")
+            self.sio.connect(self.ml_server_url, wait_timeout=5)
+            return True
+        except Exception as e:
+            logging.error(f"Failed to connect to ML server: {e}")
+            self.ml_server_connected = False
+            return False
+    
+    def _reconnect_to_ml_server(self):
+        """Attempt to reconnect to ML server"""
+        self._last_reconnect_attempt = time.time()
+        if not self.sio.connected:
+            return self._connect_to_ml_server()
+        return True
     
     def stop_monitoring(self):
         """Stop the camera monitoring thread"""
@@ -157,4 +208,7 @@ class CameraModule:
             
             # Disconnect from Socket.IO server
             if self.sio.connected:
-                self.sio.disconnect()
+                try:
+                    self.sio.disconnect()
+                except:
+                    pass  # Ignore errors on disconnect
