@@ -1,4 +1,3 @@
-import os
 import time
 import threading
 from flask import Flask, jsonify
@@ -15,8 +14,8 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Initialize SocketIO with CORS allowed
-socketio = SocketIO(app, cors_allowed_origins="*")
-
+# Initialize SocketIO with CORS allowed
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 # Define sensor callbacks
 def water_level_callback(data):
     socketio.emit('water_level_reading', data)
