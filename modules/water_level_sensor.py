@@ -2,17 +2,17 @@ import serial
 import serial.tools.list_ports
 import time
 import datetime
-from typing import Optional
-from flask_socketio import SocketIO
+from typing import Optional, Callable
 
 class WaterLevelSensor:
     """
     Class to handle the water level sensor connected to Arduino.
-    Provides methods to initialize, read data, and emit readings via websockets.
+    Provides methods to initialize and read data. 
+    Uses callback for handling readings instead of emitting directly.
     """
     
-    def __init__(self, socketio: SocketIO, port: Optional[str] = None, baudrate: int = 9600, timeout: int = 1, threshold: int = 500):
-        self.socketio = socketio
+    def __init__(self, callback: Callable, port: Optional[str] = None, baudrate: int = 9600, timeout: int = 1, threshold: int = 500):
+        self.callback = callback
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -70,7 +70,7 @@ class WaterLevelSensor:
 
     def start_monitoring(self, interval=1.0):
         """
-        Start monitoring the water level sensor and emit readings via websocket.
+        Start monitoring the water level sensor and call the callback with readings.
 
         Args:
             interval: Time between readings in seconds (default: 1.0)
@@ -89,25 +89,15 @@ class WaterLevelSensor:
                 # Debug prints
                 print(f"Water level sensor reading: {reading}")
             
-                # Prepare data to emit
+                # Prepare data to send via callback
                 data = {
                     'timestamp': time.time(),
                     'value': reading,
                     'high_water_level': high_water
                 }
             
-                # Emit reading via websocket
-                emittedWaterLevelReading = self.socketio.emit('water_level_reading', data)
-                print(f"Emitted water_level_reading: {emittedWaterLevelReading}")
-            
-                # If high water level is detected, also emit an alert
-                if high_water:
-                    alert_data = {
-                        'timestamp': time.time(),
-                        'message': 'High water level detected!'
-                    }
-                    emittedWaterLevelAlert =self.socketio.emit('water_level_alert', alert_data)
-                    print(f"Emitted water_level_alert: {emittedWaterLevelAlert}")
+                # Call the callback with the reading data
+                self.callback(data)
 
             time.sleep(interval)
 

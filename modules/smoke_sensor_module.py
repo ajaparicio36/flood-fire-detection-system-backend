@@ -1,26 +1,20 @@
 import time
-from flask_socketio import SocketIO
-from flask import Flask
-from flask_socketio import SocketIO
-
 import RPi.GPIO as GPIO
 
 class SmokeSensor:
     """
     Class to handle the MQ2 smoke/gas sensor connected to Raspberry Pi.
-    Provides methods to initialize, read data, and emit readings via websockets.
+    Provides methods to initialize, read data without Socket.IO dependency.
     """
     
-    def __init__(self, socketio, pin=11, threshold=300):
+    def __init__(self, pin=11, threshold=300):
         """
         Initialize the smoke sensor.
         
         Args:
-            socketio: The SocketIO instance for emitting data
             pin: GPIO pin number (default: 11 which is GPIO 0)
             threshold: Threshold value to detect smoke (default: 300)
         """
-        self.socketio = socketio
         self.pin = pin
         self.threshold = threshold
         self.is_running = False
@@ -38,11 +32,12 @@ class SmokeSensor:
         value = self.read_sensor()
         return value == GPIO.LOW  # MQ2 outputs LOW when gas detected
 
-    def start_monitoring(self, interval=1.0):
+    def start_monitoring(self, callback, interval=1.0):
         """
-        Start monitoring the smoke sensor and emit readings via websocket.
+        Start monitoring the smoke sensor and send readings to callback.
         
         Args:
+            callback: Function to call with sensor data
             interval: Time between readings in seconds (default: 1.0)
         """
         self.is_running = True
@@ -54,24 +49,15 @@ class SmokeSensor:
             # Debug prints
             print(f"Smoke sensor reading: {reading}")
             
-            # Prepare data to emit
+            # Prepare data to send to callback
             data = {
                 'timestamp': time.time(),
                 'value': reading,
                 'smoke_detected': smoke_detected
             }
             
-            # Emit reading via websocket
-            emittedSmokeReading = self.socketio.emit('smoke_sensor_reading', data)
-            print(f"Emitted smoke_sensor_reading: {emittedSmokeReading}")
-            # If smoke is detected, also emit an alert
-            if smoke_detected:
-                alert_data = {
-                    'timestamp': time.time(),
-                    'message': 'Smoke or gas detected!'
-                }
-                emittedSmokeAlert = self.socketio.emit('smoke_alert', alert_data)
-                print(f"Emitted smoke_alert: {emittedSmokeAlert}")
+            # Send data to callback function
+            callback(data)
 
             time.sleep(interval)
     
