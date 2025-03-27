@@ -28,23 +28,16 @@ class SmokeSensor:
         # Setup GPIO with pull-down resistor to reduce noise
         GPIO.setmode(GPIO.BOARD)  # Use physical pin numbering
         GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        print(f"Smoke sensor initialized on pin {self.pin} with pull-down resistor")
     
     def read_sensor(self):
         """Read the current value from the smoke sensor."""
-        value = GPIO.input(self.pin)
-        print(f"Sensor reading: {value}")
-        return value
+        return GPIO.input(self.pin)
     
     def is_smoke_detected(self):
         """Check if smoke is detected based on the threshold."""
         value = self.read_sensor()
-        is_detected = value == GPIO.LOW  # MQ2 outputs LOW when gas detected
-        if is_detected:
-            print("ALERT: Smoke or gas detected!")
-        return is_detected
+        return value == GPIO.LOW  # MQ2 outputs LOW when gas detected
 
-    
     def start_monitoring(self, interval=1.0):
         """
         Start monitoring the smoke sensor and emit readings via websocket.
@@ -53,7 +46,6 @@ class SmokeSensor:
             interval: Time between readings in seconds (default: 1.0)
         """
         self.is_running = True
-        print(f"Starting smoke sensor monitoring (interval: {interval}s)")
         
         while self.is_running:
             reading = self.read_sensor()
@@ -67,26 +59,23 @@ class SmokeSensor:
             }
             
             # Emit reading via websocket
-            print(f"Emitting data: {data}")
-            self.socketio.emit('smoke_sensor_reading', data)
-            
+            emittedSmokeReading = self.socketio.emit('smoke_sensor_reading', data)
+            print(f"Emitted smoke_sensor_reading: {emittedSmokeReading}")
             # If smoke is detected, also emit an alert
             if smoke_detected:
                 alert_data = {
                     'timestamp': time.time(),
                     'message': 'Smoke or gas detected!'
                 }
-                print(f"Emitting alert: {alert_data}")
-                self.socketio.emit('smoke_alert', alert_data)
-            
+                emittedSmokeAlert = self.socketio.emit('smoke_alert', alert_data)
+                print(f"Emitted smoke_alert: {emittedSmokeAlert}")
+                
             time.sleep(interval)
     
     def stop_monitoring(self):
         """Stop the monitoring loop."""
         self.is_running = False
-        print("Stopping smoke sensor monitoring")
     
     def cleanup(self):
         """Clean up GPIO resources."""
         GPIO.cleanup(self.pin)
-        print("Cleaned up smoke sensor GPIO resources")
