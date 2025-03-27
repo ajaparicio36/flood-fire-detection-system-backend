@@ -83,10 +83,15 @@ class CameraModule:
             """Receive processed frame with detections from ML server"""
             if self.callback:
                 # Forward the processed data to the callback
+                # This data now contains the base64 image with bounding boxes
+                # and fire detection status
                 self.callback({
-                    'frame': data,
-                    'timestamp': time.time()
+                    'frame': data['image'] if isinstance(data, dict) else data,  # Handle both new and old format
+                    'timestamp': time.time(),
+                    'processed': True,
+                    'fire_detected': data.get('fire_detected', False) if isinstance(data, dict) else False
                 })
+
 
     def start_monitoring(self, callback: Optional[Callable] = None):
         """
@@ -126,6 +131,10 @@ class CameraModule:
         self._connect_to_ml_server()
         
         # Main capture loop
+        threading.Thread(target=self._capture_loop, daemon=True).start()
+
+    def _capture_loop(self):
+        """Main loop for capturing and processing frames."""
         while not self._stop_event.is_set():
             try:
                 # Capture frame
@@ -135,45 +144,42 @@ class CameraModule:
                     time.sleep(0.5)
                     continue
                 
-                # Always send the raw frame to the callback
-                if self.callback:
-                    _, buffer = cv2.imencode('.jpg', frame)
-                    base64_frame = base64.b64encode(buffer).decode('utf-8')
-                    self.callback({
-                        'frame': f'data:image/jpeg;base64,{base64_frame}',
-                        'timestamp': time.time()
-                    })
+                # Convert to base64 (do this only once)
+                _, buffer = cv2.imencode('.jpg', frame)
+                base64_frame = base64.b64encode(buffer).decode('utf-8')
+                frame_data = f'data:image/jpeg;base64,{base64_frame}'
+                
+                # Process based on ML server connection status
+                if not self.ml_server_connected:
+                    # If ML server not connected, send raw frame
+                    if self.callback:
+                        self.callback({
+                            'frame': frame_data,
+                            'timestamp': time.time(),
+                            'processed': False
+                        })
                     
-                    # Process frame locally if ML server is not connected
-                    if not self.ml_server_connected:
-                        # If not connected to ML server, just pass the raw frame
+                    # Try to reconnect periodically
+                    if not hasattr(self, '_last_reconnect_attempt') or \
+                       time.time() - self._last_reconnect_attempt > 30:
+                        self._reconnect_to_ml_server()
+                else:
+                    # If connected to ML server, send frame for processing
+                    # The processed frame will be returned via the processed_frame event
+                    try:
+                        self.sio.emit('frame', frame_data)
+                    except Exception as e:
+                        logging.error(f"Error sending frame to ML server: {e}")
+                        self.ml_server_connected = False
+                        
+                        # Fall back to raw frame if ML server fails
                         if self.callback:
-                            # Convert to base64 for consistent format
-                            _, buffer = cv2.imencode('.jpg', frame)
-                            base64_frame = base64.b64encode(buffer).decode('utf-8')
                             self.callback({
-                                'frame': {'image': f'data:image/jpeg;base64,{base64_frame}'},
+                                'frame': frame_data,
                                 'timestamp': time.time(),
-                                'ml_server_status': 'disconnected'
+                                'processed': False
                             })
-                        
-                        # Try to reconnect periodically
-                        if not hasattr(self, '_last_reconnect_attempt') or \
-                           time.time() - self._last_reconnect_attempt > 30:  # Try every 30 seconds
-                            self._reconnect_to_ml_server()
-                    else:
-                        # Convert to base64
-                        _, buffer = cv2.imencode('.jpg', frame)
-                        base64_frame = base64.b64encode(buffer).decode('utf-8')
-                        frame_data = f'data:image/jpeg;base64,{base64_frame}'
-                        
-                        # Send to ML server
-                        try:
-                            self.sio.emit('frame', frame_data)
-                        except Exception as e:
-                            logging.error(f"Error sending frame to ML server: {e}")
-                            self.ml_server_connected = False
-                    
+                
                 # Wait for next capture
                 time.sleep(self.capture_interval)
                 
