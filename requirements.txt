@@ -17,3 +17,5 @@ RPi.GPIO==0.7.1
 python-dotenv==1.0.0
 opencv-python==4.8.1.78
 
+# Pin NumPy to 1.x version to avoid compatibility issues with OpenCV
+numpy<2.0.0
