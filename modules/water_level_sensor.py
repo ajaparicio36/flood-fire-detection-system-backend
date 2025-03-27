@@ -85,6 +85,9 @@ class WaterLevelSensor:
         
             if reading is not None:
                 high_water = self.is_high_water_level(reading)
+
+                # Debug prints
+                print(f"Water level sensor reading: {reading}")
             
                 # Prepare data to emit
                 data = {
@@ -105,7 +108,7 @@ class WaterLevelSensor:
                     }
                     emittedWaterLevelAlert =self.socketio.emit('water_level_alert', alert_data)
                     print(f"Emitted water_level_alert: {emittedWaterLevelAlert}")
-                    
+
             time.sleep(interval)
 
     def stop_monitoring(self):

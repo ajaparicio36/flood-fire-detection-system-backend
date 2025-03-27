@@ -50,6 +50,9 @@ class SmokeSensor:
         while self.is_running:
             reading = self.read_sensor()
             smoke_detected = self.is_smoke_detected()
+
+            # Debug prints
+            print(f"Smoke sensor reading: {reading}")
             
             # Prepare data to emit
             data = {
@@ -69,7 +72,7 @@ class SmokeSensor:
                 }
                 emittedSmokeAlert = self.socketio.emit('smoke_alert', alert_data)
                 print(f"Emitted smoke_alert: {emittedSmokeAlert}")
-                
+
             time.sleep(interval)
     
     def stop_monitoring(self):

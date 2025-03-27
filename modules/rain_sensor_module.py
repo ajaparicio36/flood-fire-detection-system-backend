@@ -54,6 +54,9 @@ class RainSensor:
             digital_reading = self.read_digital_sensor()
             rain_detected = self.is_rain_detected()
             
+            # Debug prints
+            print(f"Rain sensor digital reading: {digital_reading}")
+            
             # Prepare data to emit
             data = {
                 'timestamp': time.time(),
@@ -75,6 +78,7 @@ class RainSensor:
                 print(f"Emitted rain_alert event: {alert_message}")
             
             time.sleep(interval)
+
     
     def stop_monitoring(self):
         """Stop the monitoring loop."""
