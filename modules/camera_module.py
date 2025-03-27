@@ -86,19 +86,23 @@ class CameraModule:
                 return
             
             # Connect to the camera
-            self.cap = cv2.VideoCapture(self.camera_index)
-            if not self.cap.isOpened():
-                logging.error(f"Failed to open camera at index {self.camera_index}")
+            try:
+                self.cap = cv2.VideoCapture(self.camera_index)
+                if not self.cap.isOpened():
+                    logging.error(f"Failed to open camera at index {self.camera_index}")
+                    return
+            except Exception as e:
+                logging.error(f"Error opening camera: {e}")
                 return
-            
-            # Set resolution
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
-            
-            # Reset stop event
-            self._stop_event.clear()
-            self.is_running = True
         
+        # Set resolution
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
+        
+        # Reset stop event
+        self._stop_event.clear()
+        self.is_running = True
+    
         # Connect to ML server
         try:
             self.sio.connect(self.ml_server_url)
