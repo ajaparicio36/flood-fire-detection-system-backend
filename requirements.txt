@@ -15,4 +15,5 @@ RPi.GPIO==0.7.1
 
 # Utility packages
 python-dotenv==1.0.0
+opencv-python==4.8.1.78
 

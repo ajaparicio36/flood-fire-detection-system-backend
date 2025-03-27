@@ -6,6 +6,7 @@ from flask_cors import CORS
 from modules.water_level_sensor import WaterLevelSensor
 from modules.rain_sensor_module import RainSensor
 from modules.smoke_sensor_module import SmokeSensor
+from modules.camera_module import CameraModule
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -16,6 +17,16 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # Initialize SocketIO with CORS allowed
 # Initialize SocketIO with CORS allowed
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+def camera_callback(data):
+    socketio.emit('camera_data', data)
+    # If the processed frame contains detection data
+    if 'detections' in data.get('frame', {}):
+        socketio.emit('camera_alert', {
+            'message': f"Object detected in camera view",
+            'detections': data['frame']['detections']
+        })
+
 # Define sensor callbacks
 def water_level_callback(data):
     socketio.emit('water_level_reading', data)
@@ -45,6 +56,12 @@ def smoke_sensor_callback(data):
 water_sensor = WaterLevelSensor(callback=water_level_callback)
 rain_sensor = RainSensor()
 smoke_sensor = SmokeSensor()
+camera = CameraModule(
+    ml_server_url='http://localhost:5001',  # Update with your ML server URL
+    capture_interval=0.5,                   # Adjust based on your needs
+    resolution=(640, 480)                   # Adjust based on your needs
+)
+
 
 # Dictionary to store sensor threads
 sensor_threads = {}
@@ -61,7 +78,8 @@ def status():
         "sensors": {
             "water_level": water_sensor.is_running,
             "rain": rain_sensor.is_running,
-            "smoke": smoke_sensor.is_running
+            "smoke": smoke_sensor.is_running,
+            "camera": camera.is_running
         }
     })
 
@@ -100,6 +118,11 @@ def start_sensors():
     smoke_thread.start()
     sensor_threads['smoke'] = smoke_thread
 
+    camera_thread = threading.Thread(target=lambda: camera.start_monitoring(camera_callback))
+    camera_thread.daemon = True
+    camera_thread.start()
+    sensor_threads['camera'] = camera_thread
+
 # SocketIO events
 @socketio.on('connect')
 def handle_connect():
@@ -115,6 +138,7 @@ def cleanup():
     water_sensor.stop_monitoring()
     rain_sensor.stop_monitoring()
     smoke_sensor.stop_monitoring()
+    camera.stop_monitoring()
     
     # Wait for threads to finish
     time.sleep(1)
@@ -122,6 +146,8 @@ def cleanup():
     water_sensor.cleanup()
     rain_sensor.cleanup()
     smoke_sensor.cleanup()
+    camera.cleanup()
+
 
 if __name__ == "__main__":
     try:
