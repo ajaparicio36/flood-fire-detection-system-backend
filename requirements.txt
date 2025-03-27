@@ -9,6 +9,7 @@ pyserial==3.5
 python-socketio==5.10.0
 python-engineio==4.8.0
 eventlet==0.33.3
+requests==2.31.0  # Add this line
 
 # Raspberry Pi GPIO
 RPi.GPIO==0.7.1
