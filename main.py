@@ -7,6 +7,7 @@ from modules.water_level_sensor import WaterLevelSensor
 from modules.rain_sensor_module import RainSensor
 from modules.smoke_sensor_module import SmokeSensor
 from modules.camera_module import CameraModule
+import os
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -56,8 +57,11 @@ def smoke_sensor_callback(data):
 water_sensor = WaterLevelSensor(callback=water_level_callback)
 rain_sensor = RainSensor()
 smoke_sensor = SmokeSensor()
+# Get ML server URL from environment variable or use default
+ml_server_url = os.environ.get('ML_SERVER_URL', 'http://localhost:5001')
+
 camera = CameraModule(
-    ml_server_url='http://localhost:5001',  # Update with your ML server URL
+    ml_server_url=ml_server_url,            # Using environment variable with fallback
     capture_interval=0.5,                   # Adjust based on your needs
     resolution=(640, 480)                   # Adjust based on your needs
 )
